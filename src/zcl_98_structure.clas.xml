@@ -3,9 +3,9 @@
  <asx:abap xmlns:asx="http://www.sap.com/abapxml" version="1.0">
   <asx:values>
    <VSEOCLASS>
-    <CLSNAME>ZCL_98_INTRO</CLSNAME>
+    <CLSNAME>ZCL_98_STRUCTURE</CLSNAME>
     <LANGU>E</LANGU>
-    <DESCRIPT>Analyze dictionary and CDS</DESCRIPT>
+    <DESCRIPT>Defining Dictionary Structures</DESCRIPT>
     <STATE>1</STATE>
     <CLSCCINCL>X</CLSCCINCL>
     <FIXPT>X</FIXPT>

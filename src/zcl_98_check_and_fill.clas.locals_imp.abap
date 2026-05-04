@@ -149,7 +149,12 @@ CLASS lcl_table IMPLEMENTATION.
     ASSIGN r_source->* TO FIELD-SYMBOL(<source>).
     ASSIGN r_target->* TO FIELD-SYMBOL(<target>).
 
-    SELECT FROM (source) FIELDS * INTO TABLE @<source>.
+    " Read only first 200 rows from the source table
+    SELECT FROM (source)
+      FIELDS *
+      ORDER BY PRIMARY KEY
+      INTO TABLE @<source>
+      UP TO 500 ROWS.
 
     LOOP AT <source> ASSIGNING FIELD-SYMBOL(<source_row>).
       INSERT INITIAL LINE INTO TABLE <target> ASSIGNING FIELD-SYMBOL(<target_row>).
@@ -174,11 +179,11 @@ CLASS lcl_table IMPLEMENTATION.
 
       " Birth Date: Calculate a date based on Employee ID to make it look realistic
       ASSIGN COMPONENT 'BIRTH_DATE' OF STRUCTURE <target_row> TO FIELD-SYMBOL(<t_birth>).
-      IF <t_birth> IS ASSIGNED AND <s_id> IS ASSIGNED.
-        " Logic: 1980-01-01 + (last 3 digits of ID) days
-        lv_date = '19800101'.
-        lv_date = lv_date + ( <s_id> MOD 1000 ).
-        <t_birth> = lv_date.
+       IF <t_birth> IS ASSIGNED AND <s_id> IS ASSIGNED.
+        " Year offset (0-20), month (1-12) and day (1-28) calculated on the fly
+                <t_birth> = |{ 1980 + ( <s_id> * 100 ) MOD 25 }{
+                 ( <s_id> * 7 ) MOD 12 + 1 WIDTH = 2 ALIGN = RIGHT PAD = '0' }{
+                 ( <s_id> * 3 ) MOD 28 + 1 WIDTH = 2 ALIGN = RIGHT PAD = '0' }|.
       ENDIF.
 
       " Entry Date: Different dates within the last year (365 days)
