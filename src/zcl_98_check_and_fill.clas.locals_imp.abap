@@ -26,6 +26,14 @@ CLASS lcl_table DEFINITION.
       copy_with_modevi RETURNING VALUE(r_count) TYPE i
                        RAISING
                                  cx_root .
+    " Helper to provide consistent department data
+    METHODS get_department_data RETURNING VALUE(r_data) TYPE string_table.
+
+    " Independent method to fill department table
+    METHODS fill_depment_manual RETURNING VALUE(r_count) TYPE i RAISING cx_root.
+
+
+    METHODS get_source RETURNING VALUE(r_source) TYPE tabname.
 
   PROTECTED SECTION.
 
@@ -132,84 +140,99 @@ CLASS lcl_table IMPLEMENTATION.
 
   ENDMETHOD.
 
+
   METHOD copy_with_modevi.
     DATA r_source     TYPE REF TO data.
     DATA r_target     TYPE REF TO data.
     DATA lv_timestamp TYPE timestampl.
-    DATA lv_date      TYPE d.
-    DATA lv_today     TYPE d. " Variable to hold today's date
+    DATA lv_today     TYPE d.
 
-    " Get system info once before the loop
+    " Get centralized department data
+    DATA(lt_dept_raw) = get_department_data( ).
+    DATA(lv_max_dept) = lines( lt_dept_raw ).
+
+    " Initialize randomizer
+    DATA(lo_rand) = cl_abap_random_int=>create( seed = cl_abap_random=>seed( )
+                                                min  = 1
+                                                max  = lv_max_dept ).
+
     GET TIME STAMP FIELD lv_timestamp.
     lv_today = cl_abap_context_info=>get_system_date( ).
 
+    " Create dynamic tables based on source and target
     CREATE DATA r_source TYPE TABLE OF (source).
     CREATE DATA r_target TYPE TABLE OF (name).
 
     ASSIGN r_source->* TO FIELD-SYMBOL(<source>).
     ASSIGN r_target->* TO FIELD-SYMBOL(<target>).
 
-    " Read only first 200 rows from the source table
-    SELECT FROM (source)
-      FIELDS *
-      ORDER BY PRIMARY KEY
-      INTO TABLE @<source>
-      UP TO 500 ROWS.
+    " Fetch data from source (e.g., /DMO/EMPLOYEE_HR)
+    SELECT FROM (source) FIELDS * ORDER BY PRIMARY KEY INTO TABLE @<source> UP TO 500 ROWS.
 
     LOOP AT <source> ASSIGNING FIELD-SYMBOL(<source_row>).
       INSERT INITIAL LINE INTO TABLE <target> ASSIGNING FIELD-SYMBOL(<target_row>).
 
-      " 1. Basic mapping
+      " 1. Map identical fields (first_name, last_name, etc.)
       MOVE-CORRESPONDING <source_row> TO <target_row>.
 
-      " 2. Key and Salary mapping
+      " 2. Map fields with different names in Z98_EMPLOY
+      " Map Employee -> Employee_ID
       ASSIGN COMPONENT 'EMPLOYEE' OF STRUCTURE <source_row> TO FIELD-SYMBOL(<s_id>).
       ASSIGN COMPONENT 'EMPLOYEE_ID' OF STRUCTURE <target_row> TO FIELD-SYMBOL(<t_id>).
       IF <s_id> IS ASSIGNED AND <t_id> IS ASSIGNED. <t_id> = <s_id>. ENDIF.
 
+      " Map Salary -> Annual_Salary
       ASSIGN COMPONENT 'SALARY' OF STRUCTURE <source_row> TO FIELD-SYMBOL(<s_sal>).
       ASSIGN COMPONENT 'ANNUAL_SALARY' OF STRUCTURE <target_row> TO FIELD-SYMBOL(<t_sal>).
       IF <s_sal> IS ASSIGNED AND <t_sal> IS ASSIGNED. <t_sal> = <s_sal>. ENDIF.
 
+      " Map Salary_Currency -> Currency_Code
       ASSIGN COMPONENT 'SALARY_CURRENCY' OF STRUCTURE <source_row> TO FIELD-SYMBOL(<s_cur>).
       ASSIGN COMPONENT 'CURRENCY_CODE' OF STRUCTURE <target_row> TO FIELD-SYMBOL(<t_cur>).
       IF <s_cur> IS ASSIGNED AND <t_cur> IS ASSIGNED. <t_cur> = <s_cur>. ENDIF.
 
-      " 3. Synthetic Date Generation (since source lacks them)
-
-      " Birth Date: Calculate a date based on Employee ID to make it look realistic
+      " 3. Generate Dates
       ASSIGN COMPONENT 'BIRTH_DATE' OF STRUCTURE <target_row> TO FIELD-SYMBOL(<t_birth>).
-       IF <t_birth> IS ASSIGNED AND <s_id> IS ASSIGNED.
-        " Year offset (0-20), month (1-12) and day (1-28) calculated on the fly
-                <t_birth> = |{ 1980 + ( <s_id> * 100 ) MOD 25 }{
-                 ( <s_id> * 7 ) MOD 12 + 1 WIDTH = 2 ALIGN = RIGHT PAD = '0' }{
-                 ( <s_id> * 3 ) MOD 28 + 1 WIDTH = 2 ALIGN = RIGHT PAD = '0' }|.
+      IF <t_birth> IS ASSIGNED AND <s_id> IS ASSIGNED.
+        <t_birth> = |{ 1980 + ( <s_id> MOD 25 ) }{ ( <s_id> MOD 12 ) + 1 WIDTH = 2 ALIGN = RIGHT PAD = '0' }01|.
       ENDIF.
 
-      " Entry Date: Different dates within the last year (365 days)
       ASSIGN COMPONENT 'ENTRY_DATE' OF STRUCTURE <target_row> TO FIELD-SYMBOL(<t_entry>).
-      IF <t_entry> IS ASSIGNED AND <s_id> IS ASSIGNED.
-        " Logic: Current date minus (ID mod 365) days
-        lv_date = lv_today.
-        lv_date = lv_date - ( <s_id> MOD 365 ).
-        <t_entry> = lv_date.
+      IF <t_entry> IS ASSIGNED. <t_entry> = lv_today - ( <s_id> MOD 365 ). ENDIF.
+
+      " 4. FIX: Dynamic Department Mapping (Must be UPPERCASE for component name)
+      ASSIGN COMPONENT 'DEPARTMENT_ID' OF STRUCTURE <target_row> TO FIELD-SYMBOL(<t_dept>).
+      IF <t_dept> IS ASSIGNED.
+        DATA(lv_dept_line) = lt_dept_raw[ lo_rand->get_next( ) ].
+        SPLIT lv_dept_line AT '|' INTO DATA(lv_did) DATA(lv_dtext).
+
+        " Clean and assign
+        CONDENSE lv_did.
+        <t_dept> = CONV z98_department_id( lv_did ).
       ENDIF.
 
-      " 4. Admin Data (z98_s_admin)
+      " 5. Admin Data (z98_s_admin)
       ASSIGN COMPONENT 'CREATED_BY' OF STRUCTURE <target_row> TO FIELD-SYMBOL(<c_by>).
       IF <c_by> IS ASSIGNED. <c_by> = sy-uname. ENDIF.
 
       ASSIGN COMPONENT 'CREATED_AT' OF STRUCTURE <target_row> TO FIELD-SYMBOL(<c_at>).
       IF <c_at> IS ASSIGNED. <c_at> = lv_timestamp. ENDIF.
 
-      ASSIGN COMPONENT 'LOCAL_LAST_CHANGED_AT' OF STRUCTURE <target_row> TO FIELD-SYMBOL(<l_at>).
+      ASSIGN COMPONENT 'LOCAL_LAST_CHANGED_BY' OF STRUCTURE <target_row> TO FIELD-SYMBOL(<l_l_by>).
+      IF <l_l_by> IS ASSIGNED. <l_l_by> = sy-uname. ENDIF.
+
+      ASSIGN COMPONENT 'LOCAL_LAST_CHANGED_AT' OF STRUCTURE <target_row> TO FIELD-SYMBOL(<l_l_at>).
+      IF <l_l_at> IS ASSIGNED. <l_l_at> = lv_timestamp. ENDIF.
+
+      ASSIGN COMPONENT 'LAST_CHANGED_AT' OF STRUCTURE <target_row> TO FIELD-SYMBOL(<l_at>).
       IF <l_at> IS ASSIGNED. <l_at> = lv_timestamp. ENDIF.
+
+*      INSERT <target_row> INTO TABLE <target>.
     ENDLOOP.
 
-    MODIFY (name) FROM TABLE @<target>.
-
+    DELETE FROM (name).
+    INSERT (name) FROM TABLE @<target>.
     r_count = lines( <target> ).
-
   ENDMETHOD.
 
 
@@ -250,6 +273,58 @@ CLASS lcl_table IMPLEMENTATION.
 
   ENDMETHOD.
 
+  METHOD fill_depment_manual.
+    " Fill the department table using centralized data and administrative fields
+    DATA lt_departments TYPE TABLE OF z98_depment.
+    DATA(lt_raw_data)   = get_department_data( ).
+
+    GET TIME STAMP FIELD DATA(lv_timestamp).
+
+    " 1. Clear existing entries to prevent duplicate key errors and ensure data consistency
+    DELETE FROM (name).
+
+    LOOP AT lt_raw_data INTO DATA(lv_line).
+      " Use modern APPEND VALUE for cleaner syntax
+      SPLIT lv_line AT '|' INTO DATA(lv_id) DATA(lv_description).
+      CONDENSE: lv_id, lv_description.
+
+      APPEND VALUE #(
+        client                = sy-mandt
+        id                    = lv_id
+        description           = lv_description
+        created_by            = sy-uname
+        created_at            = lv_timestamp
+        local_last_changed_by = sy-uname
+        local_last_changed_at = lv_timestamp
+        last_changed_at       = lv_timestamp
+      ) TO lt_departments.
+
+    ENDLOOP.
+
+    " 2. Insert fresh master data into the database
+    " Using (name) to target the table dynamically
+    IF lt_departments IS NOT INITIAL.
+        INSERT (name) FROM TABLE @lt_departments.
+    ENDIF.
+
+    r_count = lines( lt_departments ).
+  ENDMETHOD.
+
+
+
+  METHOD get_department_data.
+    " Centralized source for department IDs and Descriptions
+    r_data = VALUE #( ( `IT|Information Technology` )
+                      ( `HR|Human Resources` )
+                      ( `SALES|Sales and Marketing` )
+                      ( `FIN|Finance and Accounting` )
+                      ( `PROD|Production and Logistics` ) ).
+  ENDMETHOD.
+
+  METHOD get_source.
+    r_source = me->source.
+  ENDMETHOD.
+
 ENDCLASS.
 
 CLASS lcl_generator DEFINITION.
@@ -282,6 +357,7 @@ CLASS lcl_generator DEFINITION.
     DATA tables TYPE TABLE OF REF TO lcl_table.
 
     DATA out TYPE REF TO if_oo_adt_classrun_out.
+    DATA depment_table TYPE tabname.
 ENDCLASS.
 
 CLASS lcl_generator IMPLEMENTATION.
@@ -291,7 +367,7 @@ CLASS lcl_generator IMPLEMENTATION.
     APPEND NEW lcl_table( i_name = i_employ_table
                           i_source =  SWITCH #( i_version
                                            WHEN employee_table_only    THEN '/DMO/EMPLOYEE_HR' "'/LRN/EMPLOY'
-                                           "WHEN with_relationships     THEN '/LRN/EMPLOY_REL'
+                                           WHEN with_relationships     THEN '/DMO/EMPLOYEE_HR' "'/LRN/EMPLOY_REL'
                                            "WHEN with_extensions        THEN '/LRN/EMPLOY_EXT'
                                            )
                          )
@@ -299,12 +375,13 @@ CLASS lcl_generator IMPLEMENTATION.
 
     IF i_version = with_relationships.
       APPEND NEW lcl_table( i_name = i_depment_table
-                            i_source = '/LRN/DEPMENT_REL'
+                            i_source = 'Z98_DEPMENT'
                            )
           TO tables.
     ENDIF.
 
     me->out = i_out.
+    me->depment_table = i_depment_table.
 
   ENDMETHOD.
 
@@ -338,19 +415,35 @@ CLASS lcl_generator IMPLEMENTATION.
   ENDMETHOD.
 
   METHOD run_custom_fill.
+
     LOOP AT tables INTO DATA(table).
-      out->write( |[Modevi] Starting custom fill for: { table->name }| ).
+
+      " Use the getter method to access the private attribute 'source'
+      IF table->get_source( ) = 'Z98_DEPMENT'.
+        TRY.
+            DATA(lv_dep_count) = table->fill_depment_manual( ).
+            out->write( |[Master Data] Filled { table->name } using manual logic ({ lv_dep_count } rows)| ).
+          CATCH cx_root INTO DATA(ex_dep).
+            out->write( |[Error] Failed to fill master data { table->name }: { ex_dep->get_text( ) }| ).
+        ENDTRY.
+
+        out->write( `--------------------------------------------------` ).
+        CONTINUE.
+      ENDIF.
+
+      " Standard processing for Employee and other tables
+      out->write( |Table { table->name } is correctly defined.| ).
 
       TRY.
-          " Calling your specific mapping logic directly
-          DATA(lv_lines) = table->copy_with_modevi( ).
-          out->write( |Filled table { table->name }| ).
-          out->write( |[Modevi] Total rows transferred: { lv_lines }| ).
-
-        CATCH cx_root INTO DATA(lo_excp).
-          out->write( |[Modevi] Error during execution: { lo_excp->get_text( ) }| ).
+          DATA(lv_emp_count) = table->copy_with_modevi( ).
+          out->write( |Filled table { table->name } ({ lv_emp_count } rows)| ).
+        CATCH cx_root INTO DATA(ex_emp).
+          out->write( |[Error] Data copy failed for { table->name }: { ex_emp->get_text( ) }| ).
       ENDTRY.
+
+      out->write( `--------------------------------------------------` ).
     ENDLOOP.
+
   ENDMETHOD.
 
 ENDCLASS.
