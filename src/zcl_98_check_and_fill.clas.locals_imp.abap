@@ -280,6 +280,10 @@ CLASS lcl_table IMPLEMENTATION.
 
     GET TIME STAMP FIELD DATA(lv_timestamp).
 
+    DATA(lo_random) = cl_abap_random_int=>create( seed = cl_abap_random=>seed( )
+                                                  min  = 0
+                                                  max  = 100 ).
+
     " 1. Clear existing entries to prevent duplicate key errors and ensure data consistency
     DELETE FROM (name).
 
@@ -292,6 +296,8 @@ CLASS lcl_table IMPLEMENTATION.
         client                = sy-mandt
         id                    = lv_id
         description           = lv_description
+        head_id               = lo_random->get_next( )
+        assistant_id          = lo_random->get_next( )
         created_by            = sy-uname
         created_at            = lv_timestamp
         local_last_changed_by = sy-uname

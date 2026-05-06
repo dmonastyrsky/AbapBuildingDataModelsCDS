@@ -11,6 +11,7 @@
 
 define view entity Z98_R_Employee
   as select from z98_employ
+  association [1..1] to Z98_R_Department as _Department on $projection.DepartmentId = _Department.Id
 {
   key employee_id           as EmployeeId,
       first_name            as FirstName,
@@ -26,5 +27,6 @@ define view entity Z98_R_Employee
       created_at            as CreatedAt,
       local_last_changed_by as LocalLastChangedBy,
       local_last_changed_at as LocalLastChangedAt,
-      last_changed_at       as LastChangedAt
+      last_changed_at       as LastChangedAt,
+      _Department
 }

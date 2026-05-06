@@ -3,11 +3,11 @@
 {
 "FROM":
 [
-"Z98_EMPLOY"
+"Z98_DEPMENT"
 ],
 "ASSOCIATED":
 [
-"Z98_R_DEPARTMENT"
+"Z98_R_EMPLOYEE"
 ],
 "BASE":
 [],
