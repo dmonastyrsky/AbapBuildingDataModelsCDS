@@ -41,6 +41,7 @@ CLASS lcl_table DEFINITION.
 
 
     DATA source TYPE tabname.
+    METHODS assign_managers_to_depts IMPORTING it_employees TYPE ANY TABLE.
 
     CLASS-METHODS is_table
       IMPORTING
@@ -151,6 +152,8 @@ CLASS lcl_table IMPLEMENTATION.
     DATA(lt_dept_raw) = get_department_data( ).
     DATA(lv_max_dept) = lines( lt_dept_raw ).
 
+    DATA lv_dept_assigned TYPE abap_bool VALUE abap_false.
+
     " Initialize randomizer
     DATA(lo_rand) = cl_abap_random_int=>create( seed = cl_abap_random=>seed( )
                                                 min  = 1
@@ -167,7 +170,7 @@ CLASS lcl_table IMPLEMENTATION.
     ASSIGN r_target->* TO FIELD-SYMBOL(<target>).
 
     " Fetch data from source (e.g., /DMO/EMPLOYEE_HR)
-    SELECT FROM (source) FIELDS * ORDER BY PRIMARY KEY INTO TABLE @<source> UP TO 500 ROWS.
+    SELECT FROM (source) FIELDS * ORDER BY PRIMARY KEY INTO TABLE @<source> UP TO 100 ROWS.
 
     LOOP AT <source> ASSIGNING FIELD-SYMBOL(<source_row>).
       INSERT INITIAL LINE INTO TABLE <target> ASSIGNING FIELD-SYMBOL(<target_row>).
@@ -209,6 +212,9 @@ CLASS lcl_table IMPLEMENTATION.
         " Clean and assign
         CONDENSE lv_did.
         <t_dept> = CONV z98_department_id( lv_did ).
+
+        " Set flag to true as a department was assigned
+        lv_dept_assigned = abap_true.
       ENDIF.
 
       " 5. Admin Data (z98_s_admin)
@@ -233,7 +239,14 @@ CLASS lcl_table IMPLEMENTATION.
     DELETE FROM (name).
     INSERT (name) FROM TABLE @<target>.
     r_count = lines( <target> ).
+
+    " 2. Update managers only if the flag is true
+    IF lv_dept_assigned = abap_true.
+      me->assign_managers_to_depts( it_employees = <target> ).
+    ENDIF.
+
   ENDMETHOD.
+
 
 
   METHOD is_table.
@@ -296,8 +309,8 @@ CLASS lcl_table IMPLEMENTATION.
         client                = sy-mandt
         id                    = lv_id
         description           = lv_description
-        head_id               = lo_random->get_next( )
-        assistant_id          = lo_random->get_next( )
+*        head_id               = lo_random->get_next( )
+*        assistant_id          = lo_random->get_next( )
         created_by            = sy-uname
         created_at            = lv_timestamp
         local_last_changed_by = sy-uname
@@ -310,12 +323,56 @@ CLASS lcl_table IMPLEMENTATION.
     " 2. Insert fresh master data into the database
     " Using (name) to target the table dynamically
     IF lt_departments IS NOT INITIAL.
-        INSERT (name) FROM TABLE @lt_departments.
+      INSERT (name) FROM TABLE @lt_departments.
     ENDIF.
 
     r_count = lines( lt_departments ).
   ENDMETHOD.
 
+ METHOD assign_managers_to_depts.
+  " 1. Fetch data
+  SELECT * FROM z98_employ INTO TABLE @DATA(lt_employees).
+  SELECT * FROM z98_depment INTO TABLE @DATA(lt_departments).
+
+  " 2. Process each department
+  LOOP AT lt_departments ASSIGNING FIELD-SYMBOL(<ls_dept>).
+
+    " Create a temporary table of the SAME TYPE as lt_employees
+    DATA lt_dept_staff LIKE lt_employees.
+    CLEAR lt_dept_staff.
+
+    " Fill the temp table with employees of the current department
+    lt_dept_staff = VALUE #( FOR emp IN lt_employees
+                             WHERE ( department_id = <ls_dept>-id ) ( emp ) ).
+
+    DATA(lv_count) = lines( lt_dept_staff ).
+    IF lv_count = 0.
+      CONTINUE.
+    ENDIF.
+
+    " 3. Random assignment logic
+    DATA(lo_rand) = cl_abap_random_int=>create( seed = cl_abap_random=>seed( )
+                                                min  = 1
+                                                max  = lv_count ).
+
+    " Get Random Head
+    DATA(lv_h_idx) = lo_rand->get_next( ).
+    <ls_dept>-head_id = lt_dept_staff[ lv_h_idx ]-employee_id.
+
+    " Get Random Assistant (if more than 1 person in dept)
+    IF lv_count > 1.
+      DATA(lv_a_idx) = lo_rand->get_next( ).
+      WHILE lv_a_idx = lv_h_idx.
+        lv_a_idx = lo_rand->get_next( ).
+      ENDWHILE.
+      <ls_dept>-assistant_id = lt_dept_staff[ lv_a_idx ]-employee_id.
+    ENDIF.
+
+  ENDLOOP.
+
+  " 4. Update the database
+  MODIFY z98_depment FROM TABLE @lt_departments.
+ENDMETHOD.
 
 
   METHOD get_department_data.
@@ -370,6 +427,13 @@ CLASS lcl_generator IMPLEMENTATION.
 
   METHOD constructor.
 
+    IF i_version = with_relationships.
+      APPEND NEW lcl_table( i_name = i_depment_table
+                            i_source = 'Z98_DEPMENT'
+                           )
+          TO tables.
+    ENDIF.
+
     APPEND NEW lcl_table( i_name = i_employ_table
                           i_source =  SWITCH #( i_version
                                            WHEN employee_table_only    THEN '/DMO/EMPLOYEE_HR' "'/LRN/EMPLOY'
@@ -379,12 +443,7 @@ CLASS lcl_generator IMPLEMENTATION.
                          )
         TO tables.
 
-    IF i_version = with_relationships.
-      APPEND NEW lcl_table( i_name = i_depment_table
-                            i_source = 'Z98_DEPMENT'
-                           )
-          TO tables.
-    ENDIF.
+
 
     me->out = i_out.
     me->depment_table = i_depment_table.

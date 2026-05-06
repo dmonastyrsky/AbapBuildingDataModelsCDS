@@ -13,6 +13,11 @@ define view entity Z98_C_EmployeeQuery
       DepartmentId,
       _Department.Description as DepartmentDescription,
       _Department._Assistant.LastName as AssistantName,
+      case EmployeeId 
+        when _Department.HeadId then 'H'
+        when _Department.AssistantId then 'A'
+        else ''
+      end as EmployeeRole,
       @Semantics.amount.currencyCode: 'CurrencyCode'
       AnnualSalary,
       CurrencyCode,

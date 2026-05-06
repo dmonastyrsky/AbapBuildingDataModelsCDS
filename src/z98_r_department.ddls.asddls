@@ -8,8 +8,8 @@ association [0..1] to Z98_R_Employee as _Head on $projection.HeadId = _Head.Empl
 association [1..1] to Z98_R_Employee as _Assistant on $projection.AssistantId = _Assistant.EmployeeId
  {
     key id as Id,
-    description as Description,    
-    head_id as HeadId,
+    description as Description,
+    head_id as HeadId,    
     assistant_id as AssistantId,
     created_by as CreatedBy,
     created_at as CreatedAt,
