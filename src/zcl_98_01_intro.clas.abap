@@ -40,5 +40,23 @@ CLASS zcl_98_01_intro IMPLEMENTATION.
 
     out->write( result ).
 
+    SELECT
+        ExchangeRateType,
+        SourceCurrency,
+        TargetCurrency,
+        ValidityStartDate,
+        ExchangeRate
+      FROM I_ExchangeRateRawData
+      ORDER BY ValidityStartDate DESCENDING
+      INTO TABLE @DATA(lt_rates)
+      UP TO 20 ROWS.
+
+    IF lt_rates IS NOT INITIAL.
+      out->write( lt_rates ).
+    ELSE.
+      out->write( 'В таблиці курсів взагалі порожньо.' ).
+    ENDIF.
+
+
   ENDMETHOD.
 ENDCLASS.
