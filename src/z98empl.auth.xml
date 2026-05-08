@@ -1,0 +1,16 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<abapGit version="v1.0.0" serializer="LCL_OBJECT_AUTH" serializer_version="v1.0.0">
+ <asx:abap xmlns:asx="http://www.sap.com/abapxml" version="1.0">
+  <asx:values>
+   <AUTHX>
+    <FIELDNAME>Z98EMPL</FIELDNAME>
+    <ROLLNAME>Z98_EMPLOYEE_ID</ROLLNAME>
+    <CHECKTABLE>Z98_EMPLOY</CHECKTABLE>
+   </AUTHX>
+   <AUTHX_ATTR>
+    <FIELDNAME>Z98EMPL</FIELDNAME>
+    <ABAP_LANGUAGE_VERSION>5</ABAP_LANGUAGE_VERSION>
+   </AUTHX_ATTR>
+  </asx:values>
+ </asx:abap>
+</abapGit>

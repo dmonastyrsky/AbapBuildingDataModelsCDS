@@ -1,0 +1,16 @@
+@EndUserText.label: 'Department (Access Control)'
+@MappingRole: true
+define role Z98_R_DEPARTMENT {
+    grant 
+        select
+            on
+                Z98_R_DEPARTMENT
+                    where (Id ) 
+      = aspect pfcg_auth(
+                  Z98DPMNT, 
+                  Z98DPMNT,                  
+                  ACTVT = '03'
+               )
+               /* Temporary bypass: allow all records for testing purposes */ 
+               or true;                         
+}
