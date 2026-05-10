@@ -217,6 +217,17 @@ CLASS lcl_table IMPLEMENTATION.
         lv_dept_assigned = abap_true.
       ENDIF.
 
+      " 4b. Custom Fields Mapping (Title & Country)
+      ASSIGN COMPONENT 'ZZCOUNTRY_ZEM' OF STRUCTURE <target_row> TO FIELD-SYMBOL(<t_country>).
+      IF <t_country> IS ASSIGNED.
+        <t_country> = 'DE'. " Deutschland as default country for all employees
+      ENDIF.
+
+      ASSIGN COMPONENT 'ZZTITLE_ZEM' OF STRUCTURE <target_row> TO FIELD-SYMBOL(<t_title>).
+      IF <t_title> IS ASSIGNED.
+        <t_title> = 'Mr.'.
+      ENDIF.
+
       " 5. Admin Data (z98_s_admin)
       ASSIGN COMPONENT 'CREATED_BY' OF STRUCTURE <target_row> TO FIELD-SYMBOL(<c_by>).
       IF <c_by> IS ASSIGNED. <c_by> = sy-uname. ENDIF.
@@ -438,7 +449,7 @@ CLASS lcl_generator IMPLEMENTATION.
                           i_source =  SWITCH #( i_version
                                            WHEN employee_table_only    THEN '/DMO/EMPLOYEE_HR' "'/LRN/EMPLOY'
                                            WHEN with_relationships     THEN '/DMO/EMPLOYEE_HR' "'/LRN/EMPLOY_REL'
-                                           "WHEN with_extensions        THEN '/LRN/EMPLOY_EXT'
+                                           "WHEN with_extensions       THEN '/DMO/EMPLOYEE_HR' "'/LRN/EMPLOY_EXT'
                                            )
                          )
         TO tables.
