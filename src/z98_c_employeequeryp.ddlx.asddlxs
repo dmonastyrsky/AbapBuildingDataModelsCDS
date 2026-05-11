@@ -1,0 +1,15 @@
+@Metadata.layer: #CORE
+annotate view Z98_C_EmployeeQueryP with
+  parameters
+    @EndUserText.label: 'Date of evaluation'
+    p_date
+{
+  @EndUserText.label: 'Employee Role'
+  EmployeeRole;
+  @EndUserText.label: 'Monthly Salary'
+  MonthlySalary;
+  @EndUserText.label: 'Monthly Salary Сonv'
+  MonthlySalaryConverted;
+  @EndUserText.label: 'Annual Salary in USD'
+  AnnualSalaryConverted;
+}

@@ -7,6 +7,7 @@
 @AccessControl.authorizationCheck: #NOT_REQUIRED
 @EndUserText.label: 'Employee (Query)'
 @Metadata.ignorePropagatedAnnotations: true
+@Metadata.allowExtensions: true
 define view entity Z98_C_EmployeeQueryP
   with parameters
     p_target_curr : /dmo/currency_code,
